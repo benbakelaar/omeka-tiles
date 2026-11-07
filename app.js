@@ -8,6 +8,7 @@ const SCAN_SIZE = 10;        // "Scan for next 10"
 const SCAN_ALL_SIZE = 25;    // items per request during "Scan all"
 const SCAN_ALL_DELAY = 1000; // ms pause between "Scan all" requests
 const PAUSE_EVERY = 1000;    // "Scan all" waits for the user every this many items
+const PAGE_SIZE = 100;       // items per page when viewing a stored folder
 const STORAGE_KEY = 'omekaLibrary';
 
 const $ = id => document.getElementById(id);
@@ -20,6 +21,8 @@ const scanAllPanel = $('scan-all-panel'), progressBar = $('scan-progress'), prog
 const continueBtn = $('continue-btn'), stopBtn = $('stop-btn');
 const tileViewBtn = $('tile-view-btn'), dataViewBtn = $('data-view-btn'), downloadBtn = $('download-btn');
 const statusEl = $('status'), grid = $('grid'), dataView = $('data-view');
+const pager = $('pager'), prevBtn = $('prev-btn'), nextBtn = $('next-btn');
+const pageInput = $('page-input'), pageCount = $('page-count'), pageInfo = $('page-info');
 
 // Only the endpoint is remembered between visits; items live on disk (data/).
 const state = {
@@ -27,8 +30,10 @@ const state = {
   connected: false,
   total: 0,
   scanOffset: 0,  // how far "Scan for next 10" has got (0, 10, 20...)
-  items: [],      // items currently displayed
+  items: [],      // items currently displayed (in a stored folder: the current page)
   source: 'live', // 'live' or a stored folder name (YYYYMMDD)
+  page: 1,        // current page of a stored folder
+  storedTotal: 0, // total items in the stored folder
   folders: [],    // stored folders: [{ folder, count, meta }]
   view: 'tile',   // 'tile' or 'data'
 };
@@ -92,7 +97,8 @@ async function loadFolderList() {
   renderControls();
 }
 
-async function showSource(source) {
+// Shows a source: 'live', or one page of a stored folder.
+async function showSource(source, page = 1) {
   state.source = source;
   sourceSelect.value = source;
   state.items = [];
@@ -104,15 +110,47 @@ async function showSource(source) {
   }
   setStatus(`Loading stored items from ${source}…`);
   try {
-    state.items = await (await fetch(`/local/${source}`)).json();
+    const data = await (await fetch(`/local/${source}?page=${page}&per_page=${PAGE_SIZE}`)).json();
+    state.items = data.items;
+    state.storedTotal = data.total;
+    state.page = page;
     render();
-    setStatus(`Showing ${state.items.length} stored items from ${source}.`);
+    setStatus(`Showing stored items from ${source}.`);
   } catch (err) {
     setStatus(`Could not load stored items: ${err.message}`, true);
   }
 }
 
 sourceSelect.addEventListener('change', () => showSource(sourceSelect.value));
+
+// ---------- Paging (stored folders) ----------
+
+const pageTotal = () => Math.max(1, Math.ceil(state.storedTotal / PAGE_SIZE));
+
+function goToPage(page) {
+  page = Math.min(Math.max(1, page), pageTotal());
+  if (page !== state.page) showSource(state.source, page);
+  else pageInput.value = page;
+}
+
+prevBtn.addEventListener('click', () => goToPage(state.page - 1));
+nextBtn.addEventListener('click', () => goToPage(state.page + 1));
+pageInput.addEventListener('change', () => goToPage(parseInt(pageInput.value, 10) || 1));
+
+function renderPager() {
+  pager.hidden = state.source === 'live';
+  if (pager.hidden) return;
+  const first = (state.page - 1) * PAGE_SIZE + 1;
+  const last = Math.min(state.page * PAGE_SIZE, state.storedTotal);
+  pageInput.value = state.page;
+  pageInput.max = pageTotal();
+  pageCount.textContent = pageTotal();
+  pageInfo.textContent = state.storedTotal
+    ? `Items ${first}–${last} of ${state.storedTotal}`
+    : 'No items';
+  prevBtn.disabled = state.page <= 1;
+  nextBtn.disabled = state.page >= pageTotal();
+}
 
 // Scan info for the stored folder on display, if its scan can be resumed.
 function resumableMeta() {
@@ -168,11 +206,18 @@ function toCsv(items) {
   return [header.map(csvField).join(','), ...lines].join('\n');
 }
 
+// Stored folder: the server builds a CSV of every file in the folder.
+// Live: build it here from the items on screen.
 downloadBtn.addEventListener('click', () => {
+  if (state.source !== 'live') {
+    setStatus(`Preparing CSV of all ${state.storedTotal} items in ${state.source}… (large folders take a while)`);
+    window.location.href = `/local/${state.source}/csv`;
+    return;
+  }
   const blob = new Blob([toCsv(state.items)], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `omeka-items-${state.source === 'live' ? todayFolder() + '-live' : state.source}.csv`;
+  a.download = `omeka-items-${todayFolder()}-live.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -246,10 +291,12 @@ function renderControls() {
   tileViewBtn.classList.toggle('active', state.view === 'tile');
   dataViewBtn.classList.toggle('active', state.view === 'data');
   downloadBtn.hidden = state.view !== 'data';
+  downloadBtn.textContent = live ? 'Download CSV' : 'Download CSV (whole folder)';
 }
 
 function render() {
   renderControls();
+  renderPager();
   grid.hidden = state.view !== 'tile';
   dataView.hidden = state.view !== 'data';
 
@@ -435,7 +482,7 @@ resumeBtn.addEventListener('click', async () => {
   // Refresh the stored view with the newly saved items.
   if (state.source === folder) {
     const msg = statusEl.textContent, isError = statusEl.className === 'error';
-    await showSource(folder);
+    await showSource(folder, state.page);
     setStatus(msg, isError);
   }
 });

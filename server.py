@@ -6,15 +6,20 @@
                    fetches is also saved to data/YYYYMMDD/<o:id>.json
                    (today's folder, or &folder=YYYYMMDD to resume an older one).
 - /local           Lists the dated folders in data/ with item counts and scan info.
-- /local/YYYYMMDD  Returns all items stored in that folder, sorted by ID.
+- /local/YYYYMMDD?page=1&per_page=100
+                   Returns one page of stored items, sorted by ID:
+                   {"total": N, "items": [...]}
+- /local/YYYYMMDD/csv  Downloads every item in the folder as one CSV file.
 - POST /local/YYYYMMDD/meta  Saves scan info (endpoint, progress) to _meta.json.
 
 Run:   python3 server.py
 Open:  http://localhost:8000
 """
 
+import csv
 import datetime
 import http.server
+import io
 import json
 import os
 import re
@@ -77,14 +82,62 @@ def list_folders():
     return folders
 
 
-def load_folder(name):
+def item_files(name):
+    """Item file names in a folder, sorted by Omeka ID."""
     path = os.path.join(DATA_DIR, name)
     files = [f for f in os.listdir(path) if is_item_file(f)]
-    items = []
-    for f in sorted(files, key=lambda f: int(f[:-5]) if f[:-5].isdigit() else 0):
-        with open(os.path.join(path, f), encoding="utf-8") as fh:
-            items.append(json.load(fh))
-    return items
+    return sorted(files, key=lambda f: int(f[:-5]) if f[:-5].isdigit() else 0)
+
+
+def read_item(name, file_name):
+    with open(os.path.join(DATA_DIR, name, file_name), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_page(name, page, per_page):
+    files = item_files(name)
+    start = (page - 1) * per_page
+    items = [read_item(name, f) for f in files[start:start + per_page]]
+    return {"total": len(files), "items": items}
+
+
+PROPERTY_KEY = re.compile(r"^[a-z]+:[A-Za-z]+$")
+
+
+def item_properties(item):
+    """{term: "value; value"} for an item's metadata (same rules as app.js)."""
+    props = {}
+    for key, values in item.items():
+        if not PROPERTY_KEY.match(key) or key.startswith("o:") or not isinstance(values, list):
+            continue
+        texts = []
+        for v in values:
+            if isinstance(v, dict):
+                text = next((v[k] for k in ("@value", "o:label", "@id", "display_title") if v.get(k) not in (None, "")), "")
+                if text != "":
+                    texts.append(str(text))
+        if texts:
+            props[key] = "; ".join(texts)
+    return props
+
+
+def folder_csv(name):
+    """CSV of every item in the folder: o:id, o:title, then all property terms."""
+    terms, seen, rows = [], set(), []
+    for f in item_files(name):
+        item = read_item(name, f)
+        props = item_properties(item)
+        for term in props:
+            if term not in seen:
+                seen.add(term)
+                terms.append(term)
+        rows.append((item.get("o:id"), item.get("o:title"), props))
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(["o:id", "o:title", *terms])
+    for item_id, title, props in rows:
+        writer.writerow([item_id, title or "", *(props.get(t, "") for t in terms)])
+    return out.getvalue()
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -99,17 +152,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_csv(self, text, filename):
+        body = text.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/proxy":
             return self.proxy(parsed)
         if parsed.path == "/local":
             return self.send_json(list_folders())
-        if parsed.path.startswith("/local/"):
-            name = parsed.path[len("/local/"):]
-            if not FOLDER_NAME.match(name) or not os.path.isdir(os.path.join(DATA_DIR, name)):
+        match = re.match(r"^/local/(\d{8})(/csv)?$", parsed.path)
+        if match:
+            name, want_csv = match.groups()
+            if not os.path.isdir(os.path.join(DATA_DIR, name)):
                 return self.send_error(404, "No such folder")
-            return self.send_json(load_folder(name))
+            if want_csv:
+                return self.send_csv(folder_csv(name), f"omeka-items-{name}.csv")
+            params = urllib.parse.parse_qs(parsed.query)
+            page = max(1, int(params.get("page", ["1"])[0]))
+            per_page = min(1000, max(1, int(params.get("per_page", ["100"])[0])))
+            return self.send_json(load_page(name, page, per_page))
         return super().do_GET()  # serve index.html, app.js, etc.
 
     def do_POST(self):

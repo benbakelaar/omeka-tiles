@@ -70,6 +70,14 @@
     <p id="status" role="status"></p>
   </header>
 
+  <!-- Page through stored folders (100 items per page) -->
+  <nav id="pager" hidden>
+    <button id="prev-btn" type="button">‹ Prev</button>
+    <label>Page <input id="page-input" type="number" min="1" value="1"> of <span id="page-count">1</span></label>
+    <button id="next-btn" type="button">Next ›</button>
+    <span id="page-info"></span>
+  </nav>
+
   <main id="grid"></main>
   <pre id="data-view" hidden></pre>
 
