@@ -72,3 +72,12 @@ button { padding: 0.45rem 1rem; font-size: 1rem; cursor: pointer; }
   display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;
 }
 #actions:disabled { opacity: 0.4; }
+
+#source-row { margin-bottom: 0.75rem; }
+select { padding: 0.35rem; font-size: 1rem; }
+
+#scan-all-panel { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; }
+#scan-all-panel[hidden], #live-panel[hidden] { display: none; }
+#scan-progress { width: 22rem; height: 1rem; }
+#scan-progress-text { font-size: 0.9rem; }
+#source-row label { display: inline-flex; }

@@ -10,27 +10,48 @@
   <header>
     <h1>Omeka Library</h1>
 
-    <!-- Step 1: connect to an Omeka S API -->
-    <form id="connect-form">
+    <!-- Choose live API or a stored dated folder (shown only if stored copies exist) -->
+    <div id="source-row" hidden>
       <label>
-        API endpoint
-        <input id="endpoint" type="url" placeholder="https://example.org/api" required>
+        Display from
+        <select id="source">
+          <option value="live">Live (Omeka API)</option>
+        </select>
       </label>
-      <button type="submit">Connect</button>
-      <span id="total"></span>
-    </form>
+    </div>
 
-    <!-- Step 2: load items (enabled once connected) -->
-    <fieldset id="actions" disabled>
-      <form id="add-form">
+    <div id="live-panel">
+      <!-- Step 1: connect to an Omeka S API -->
+      <form id="connect-form">
         <label>
-          Omeka ID
-          <input id="item-id" type="number" min="1" placeholder="e.g. 42" required>
+          API endpoint
+          <input id="endpoint" type="url" placeholder="https://example.org/api" required>
         </label>
-        <button type="submit">Add item</button>
+        <button type="submit">Connect</button>
+        <span id="total"></span>
       </form>
-      <button id="scan-btn" type="button">Scan for next 10</button>
-    </fieldset>
+
+      <!-- Step 2: load items (enabled once connected) -->
+      <fieldset id="actions" disabled>
+        <form id="add-form">
+          <label>
+            Omeka ID
+            <input id="item-id" type="number" min="1" placeholder="e.g. 42" required>
+          </label>
+          <button type="submit">Add item</button>
+        </form>
+        <button id="scan-btn" type="button">Scan for next 10</button>
+        <button id="scan-all-btn" type="button">Scan all</button>
+      </fieldset>
+
+      <!-- Scan-all progress (shown while a full scan runs) -->
+      <div id="scan-all-panel" hidden>
+        <progress id="scan-progress" value="0" max="1"></progress>
+        <span id="scan-progress-text"></span>
+        <button id="continue-btn" type="button" hidden>Continue</button>
+        <button id="stop-btn" type="button">Stop</button>
+      </div>
+    </div>
 
     <p id="status" role="status"></p>
   </header>
