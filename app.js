@@ -23,10 +23,10 @@ function setStatus(msg, isError = false) {
   statusEl.className = isError ? 'error' : '';
 }
 
-// GET {endpoint}/items/{id}
+// GET {endpoint}/items/{id}, via the local proxy in server.py (avoids CORS)
 async function fetchItem(endpoint, id) {
   const url = `${endpoint.replace(/\/+$/, '')}/items/${encodeURIComponent(id)}`;
-  const res = await fetch(url);
+  const res = await fetch(`/proxy?url=${encodeURIComponent(url)}`);
   if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
   return res.json();
 }
