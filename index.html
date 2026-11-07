@@ -43,20 +43,35 @@
         <button id="scan-btn" type="button">Scan for next 10</button>
         <button id="scan-all-btn" type="button">Scan all</button>
       </fieldset>
+    </div>
 
-      <!-- Scan-all progress (shown while a full scan runs) -->
-      <div id="scan-all-panel" hidden>
-        <progress id="scan-progress" value="0" max="1"></progress>
-        <span id="scan-progress-text"></span>
-        <button id="continue-btn" type="button" hidden>Continue</button>
-        <button id="stop-btn" type="button">Stop</button>
-      </div>
+    <!-- Shown when displaying a stored folder whose scan didn't finish -->
+    <div id="stored-panel" hidden>
+      <button id="resume-btn" type="button">Resume scan</button>
+      <span id="resume-info"></span>
+    </div>
+
+    <!-- Scan-all progress (shown while a full scan runs) -->
+    <div id="scan-all-panel" hidden>
+      <progress id="scan-progress" value="0" max="1"></progress>
+      <span id="scan-progress-text"></span>
+      <button id="continue-btn" type="button" hidden>Continue</button>
+      <button id="stop-btn" type="button">Stop</button>
+    </div>
+
+    <!-- Tile / Data view toggle -->
+    <div id="view-row">
+      <span class="toggle">
+        <button id="tile-view-btn" type="button" class="active">Tile</button><button id="data-view-btn" type="button">Data</button>
+      </span>
+      <button id="download-btn" type="button" hidden>Download CSV</button>
     </div>
 
     <p id="status" role="status"></p>
   </header>
 
   <main id="grid"></main>
+  <pre id="data-view" hidden></pre>
 
   <script src="app.js"></script>
 </body>
