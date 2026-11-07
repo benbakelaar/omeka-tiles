@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omeka Library</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Omeka Library</h1>
+    <form id="load-form">
+      <label>
+        API endpoint
+        <input id="endpoint" type="url" placeholder="https://example.org/api" required>
+      </label>
+      <label>
+        Item ID
+        <input id="item-id" type="number" min="1" placeholder="e.g. 42" required>
+      </label>
+      <button type="submit">Add item</button>
+    </form>
+    <p id="status" role="status"></p>
+  </header>
+
+  <main id="grid"></main>
+
+  <script src="app.js"></script>
+</body>
+</html>
