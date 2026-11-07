@@ -14,6 +14,9 @@ import urllib.request
 
 PORT = 8000
 
+# Omeka response headers the app needs (total count, pagination links).
+PASS_HEADERS = ("Omeka-S-Total-Results", "Link")
+
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -28,16 +31,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             req = urllib.request.Request(target, headers={"Accept": "application/json"})
             with urllib.request.urlopen(req, timeout=20) as res:
-                status, body = res.status, res.read()
-                ctype = res.headers.get("Content-Type", "application/json")
+                status, body, headers = res.status, res.read(), res.headers
         except urllib.error.HTTPError as err:
-            status, body = err.code, err.read()
-            ctype = err.headers.get("Content-Type", "text/plain")
+            status, body, headers = err.code, err.read(), err.headers
         except Exception as err:
             return self.send_error(502, f"Could not reach {target}: {err}")
 
         self.send_response(status)
-        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Type", headers.get("Content-Type", "application/json"))
+        for name in PASS_HEADERS:
+            if headers.get(name):
+                self.send_header(name, headers.get(name))
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

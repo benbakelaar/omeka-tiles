@@ -63,3 +63,12 @@ button { padding: 0.45rem 1rem; font-size: 1rem; cursor: pointer; }
   position: absolute; top: 0.4rem; right: 0.4rem;
   padding: 0 0.4rem; font-size: 0.9rem;
 }
+
+#connect-form { margin-bottom: 0.75rem; }
+#total { font-size: 0.9rem; color: #2a6b2a; align-self: center; }
+
+#actions {
+  border: none; padding: 0; margin: 0;
+  display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;
+}
+#actions:disabled { opacity: 0.4; }
