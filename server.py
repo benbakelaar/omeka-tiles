@@ -11,6 +11,7 @@
                    {"total": N, "items": [...]}
 - /local/YYYYMMDD/csv  Downloads every item in the folder as one CSV file.
 - POST /local/YYYYMMDD/meta  Saves scan info (endpoint, progress) to _meta.json.
+- /config          GET returns settings from config.json; POST updates them.
 
 Run:   python3 server.py
 Open:  http://localhost:8000
@@ -30,6 +31,17 @@ import urllib.request
 PORT = 8000
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(APP_DIR, "data")
+CONFIG_PATH = os.path.join(APP_DIR, "config.json")
+
+# Settings and their defaults. Saved to config.json (edited via admin.html).
+# name: (default, type, min, max)
+CONFIG_FIELDS = {
+    "endpoint":         ("", str, None, None),    # Omeka S API URL
+    "scan_chunk_size":  (25, int, 1, 1000),       # items per request in Scan all
+    "scan_delay_ms":    (1000, int, 0, 60000),    # wait between Scan all requests
+    "scan_pause_every": (1000, int, 1, 1000000),  # Scan all waits for Continue every N items
+    "page_size":        (100, int, 1, 1000),      # items per page in stored folders
+}
 
 # Omeka response headers the app needs (total count, pagination links).
 PASS_HEADERS = ("Omeka-S-Total-Results", "Link")
@@ -37,6 +49,39 @@ PASS_HEADERS = ("Omeka-S-Total-Results", "Link")
 # Matches .../items and .../items/<id>
 ITEMS_PATH = re.compile(r"/items(/\d+)?/?$")
 FOLDER_NAME = re.compile(r"^\d{8}$")
+
+
+def load_config():
+    config = {name: spec[0] for name, spec in CONFIG_FIELDS.items()}
+    if os.path.isfile(CONFIG_PATH):
+        with open(CONFIG_PATH, encoding="utf-8") as f:
+            saved = json.load(f)
+        config.update({k: v for k, v in saved.items() if k in CONFIG_FIELDS})
+    return config
+
+
+def update_config(changes):
+    """Validate and save changed settings. Returns (config, error)."""
+    config = load_config()
+    for name, value in changes.items():
+        if name not in CONFIG_FIELDS:
+            return None, f"Unknown setting: {name}"
+        _, kind, low, high = CONFIG_FIELDS[name]
+        if kind is int:
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                return None, f"{name} must be a whole number"
+            if not low <= value <= high:
+                return None, f"{name} must be between {low} and {high}"
+        else:
+            value = str(value).strip()
+            if name == "endpoint" and value and not value.startswith(("http://", "https://")):
+                return None, "endpoint must start with http:// or https://"
+        config[name] = value
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+    return config, None
 
 
 def today():
@@ -165,6 +210,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/proxy":
             return self.proxy(parsed)
+        if parsed.path == "/config":
+            return self.send_json(load_config())
         if parsed.path == "/local":
             return self.send_json(list_folders())
         match = re.match(r"^/local/(\d{8})(/csv)?$", parsed.path)
@@ -181,13 +228,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()  # serve index.html, app.js, etc.
 
     def do_POST(self):
+        try:
+            payload = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+        except ValueError:
+            return self.send_error(400, "Invalid JSON")
+        if self.path == "/config":
+            if not isinstance(payload, dict):
+                return self.send_json({"error": "Expected a JSON object"}, 400)
+            config, error = update_config(payload)
+            return self.send_json({"error": error} if error else config, 400 if error else 200)
         match = re.match(r"^/local/(\d{8})/meta$", self.path)
         if not match:
             return self.send_error(404)
-        try:
-            meta = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
-        except ValueError:
-            return self.send_error(400, "Invalid JSON")
+        meta = payload
         folder = os.path.join(DATA_DIR, match.group(1))
         os.makedirs(folder, exist_ok=True)
         with open(os.path.join(folder, "_meta.json"), "w", encoding="utf-8") as f:

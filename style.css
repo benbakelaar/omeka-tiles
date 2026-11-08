@@ -104,3 +104,12 @@ select { padding: 0.35rem; font-size: 1rem; }
 #pager label { flex-direction: row; align-items: center; gap: 0.4rem; font-size: 0.9rem; }
 #page-input { width: 5rem; }
 #page-info { color: #666; }
+
+.nav-link { font-size: 0.85rem; font-weight: normal; margin-left: 1rem; }
+.hint { font-size: 0.85rem; color: #666; margin: 0; }
+
+.admin { padding: 2rem; }
+#config-form { display: flex; flex-direction: column; gap: 1.25rem; max-width: 34rem; align-items: flex-start; }
+#config-form label { width: 100%; }
+#config-form input { width: 100%; }
+#config-form small { color: #666; }

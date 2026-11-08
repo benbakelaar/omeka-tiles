@@ -5,11 +5,15 @@
 
 const MIN_SLOTS = 12;        // 4 columns x 3 rows; the grid grows past this as needed
 const SCAN_SIZE = 10;        // "Scan for next 10"
-const SCAN_ALL_SIZE = 25;    // items per request during "Scan all"
-const SCAN_ALL_DELAY = 1000; // ms pause between "Scan all" requests
-const PAUSE_EVERY = 1000;    // "Scan all" waits for the user every this many items
-const PAGE_SIZE = 100;       // items per page when viewing a stored folder
-const STORAGE_KEY = 'omekaLibrary';
+
+// Settings from config.json (edit on the Admin page). Loaded at startup.
+const config = {
+  endpoint: '',
+  scan_chunk_size: 25,    // items per request during "Scan all"
+  scan_delay_ms: 1000,    // wait between "Scan all" requests
+  scan_pause_every: 1000, // "Scan all" waits for Continue every this many items
+  page_size: 100,         // items per page when viewing a stored folder
+};
 
 const $ = id => document.getElementById(id);
 const sourceRow = $('source-row'), sourceSelect = $('source'), livePanel = $('live-panel');
@@ -24,9 +28,9 @@ const statusEl = $('status'), grid = $('grid'), dataView = $('data-view');
 const pager = $('pager'), prevBtn = $('prev-btn'), nextBtn = $('next-btn');
 const pageInput = $('page-input'), pageCount = $('page-count'), pageInfo = $('page-info');
 
-// Only the endpoint is remembered between visits; items live on disk (data/).
+// Items live on disk (data/); the endpoint is saved in config.json.
 const state = {
-  endpoint: JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}').endpoint || '',
+  endpoint: '',
   connected: false,
   total: 0,
   scanOffset: 0,  // how far "Scan for next 10" has got (0, 10, 20...)
@@ -38,8 +42,14 @@ const state = {
   view: 'tile',   // 'tile' or 'data'
 };
 
+// Saves the connected endpoint to config.json.
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ endpoint: state.endpoint }));
+  config.endpoint = state.endpoint;
+  return fetch('/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: state.endpoint }),
+  });
 }
 
 function setStatus(msg, isError = false) {
@@ -110,7 +120,7 @@ async function showSource(source, page = 1) {
   }
   setStatus(`Loading stored items from ${source}…`);
   try {
-    const data = await (await fetch(`/local/${source}?page=${page}&per_page=${PAGE_SIZE}`)).json();
+    const data = await (await fetch(`/local/${source}?page=${page}&per_page=${config.page_size}`)).json();
     state.items = data.items;
     state.storedTotal = data.total;
     state.page = page;
@@ -125,7 +135,7 @@ sourceSelect.addEventListener('change', () => showSource(sourceSelect.value));
 
 // ---------- Paging (stored folders) ----------
 
-const pageTotal = () => Math.max(1, Math.ceil(state.storedTotal / PAGE_SIZE));
+const pageTotal = () => Math.max(1, Math.ceil(state.storedTotal / config.page_size));
 
 function goToPage(page) {
   page = Math.min(Math.max(1, page), pageTotal());
@@ -140,8 +150,8 @@ pageInput.addEventListener('change', () => goToPage(parseInt(pageInput.value, 10
 function renderPager() {
   pager.hidden = state.source === 'live';
   if (pager.hidden) return;
-  const first = (state.page - 1) * PAGE_SIZE + 1;
-  const last = Math.min(state.page * PAGE_SIZE, state.storedTotal);
+  const first = (state.page - 1) * config.page_size + 1;
+  const last = Math.min(state.page * config.page_size, state.storedTotal);
   pageInput.value = state.page;
   pageInput.max = pageTotal();
   pageCount.textContent = pageTotal();
@@ -426,26 +436,31 @@ async function runScan(folder, startDone) {
   stopBtn.hidden = false;
   renderControls();
 
-  let done = startDone;
-  let page = Math.floor(startDone / SCAN_ALL_SIZE) + 1;
+  const size = config.scan_chunk_size;
+  // Start at the page holding item startDone+1. If the chunk size changed since
+  // the scan stopped, this re-fetches a few items rather than skipping any.
+  let page = Math.floor(startDone / size) + 1;
+  let done = (page - 1) * size;
   const scanning = `Scanning all items… (saving to data/${folder})`;
   updateProgress(done);
   setStatus(scanning);
   try {
     while (!scanAll.stopped && done < state.total) {
-      const batch = await fetchPage(page, SCAN_ALL_SIZE, folder);
+      const batch = await fetchPage(page, size, folder);
+      const before = done;
       done += batch.length;
       updateProgress(done);
-      const finished = batch.length < SCAN_ALL_SIZE || done >= state.total;
+      const finished = batch.length < size || done >= state.total;
       await saveMeta(folder, done, finished);
       if (finished) break;
 
-      if (done % PAUSE_EVERY === 0) {
+      // Pause each time the count passes a multiple of scan_pause_every.
+      if (Math.floor(done / config.scan_pause_every) > Math.floor(before / config.scan_pause_every)) {
         setStatus(`Paused after ${done} items. Click Continue to keep going.`);
         await waitForContinue();
         if (!scanAll.stopped) setStatus(scanning);
       } else {
-        await sleep(SCAN_ALL_DELAY);
+        await sleep(config.scan_delay_ms);
       }
       page++;
     }
@@ -489,6 +504,16 @@ resumeBtn.addEventListener('click', async () => {
 
 // ---------- Start ----------
 
-endpointInput.value = state.endpoint;
-render();
-loadFolderList().catch(() => {});
+async function start() {
+  try {
+    Object.assign(config, await (await fetch('/config')).json());
+  } catch {
+    setStatus('Could not load settings; using defaults.', true);
+  }
+  state.endpoint = config.endpoint;
+  endpointInput.value = config.endpoint;
+  render();
+  loadFolderList().catch(() => {});
+}
+
+start();

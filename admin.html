@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omeka Library – Admin</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Omeka Library – Admin <a class="nav-link" href="/">← Back to library</a></h1>
+    <p class="hint">Settings are saved to <code>config.json</code> in the project folder.
+      Reload the library page after saving.</p>
+  </header>
+
+  <main class="admin">
+    <form id="config-form">
+      <label>
+        API endpoint
+        <input name="endpoint" type="url" placeholder="https://example.org/api">
+        <small>The Omeka S API URL the library connects to.</small>
+      </label>
+      <label>
+        Scan chunk size
+        <input name="scan_chunk_size" type="number" min="1" max="1000" required>
+        <small>Items fetched per request during Scan all (1–1000).</small>
+      </label>
+      <label>
+        Delay between requests (ms)
+        <input name="scan_delay_ms" type="number" min="0" max="60000" required>
+        <small>Wait between Scan all requests, to go easy on the server. 1000 = 1 second.</small>
+      </label>
+      <label>
+        Pause for confirmation every N items
+        <input name="scan_pause_every" type="number" min="1" required>
+        <small>Scan all stops and waits for Continue each time this many items have been fetched.</small>
+      </label>
+      <label>
+        Items per page
+        <input name="page_size" type="number" min="1" max="1000" required>
+        <small>Page size when viewing a stored folder (1–1000).</small>
+      </label>
+      <button type="submit">Save settings</button>
+      <p id="status" role="status"></p>
+    </form>
+  </main>
+
+  <script src="admin.js"></script>
+</body>
+</html>
